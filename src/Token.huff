@@ -4,12 +4,29 @@
 /* Storage Slots */
 #define constant NAME_SLOT = FREE_STORAGE_POINTER()
 
+#define macro READ_STRING_FROM_STORAGE() = takes (1) returns (0) {
+    0x20 0x00 mstore
+    dup1 sload dup1 0x01 and multiSlotRead jumpi 
+    dup1 0xff and 0x01 shr 0x20 mstore
+    dup1 0xff not and 0x40 mstore 0x60 0x00 return
+    multiSlotRead:
+        0x01 dup2 sub 0x01 shr 0x20 mstore
+        swap1 0x60 mstore 0x20 0x60 sha3
+        swap1 0x05 shr
+        0x00
+        read_loop:
+            dup2 dup2 gt read_end jumpi
+            dup3 sload dup2 0x20 mul 0x40 add mstore
+            dup3 0x01 add swap3 pop
+            0x01 add read_loop jump
+        read_end:
+            0x20 mul 0x20 add 0x00 return
+}
 
 #define macro NAME() = takes (0) returns (0){
-    [NAME_SLOT] sload
-    0x00 mstore 
-    0x20 0x00 return
+    [NAME_SLOT] READ_STRING_FROM_STORAGE()
 }
+
 
 #define jumptable DUMMY_TABLE {}
 
@@ -19,23 +36,23 @@
     add dup1 0x20 swap1 0x00 codecopy 0x00 mload // [args1_len,args1_pos]
     0x20 add swap1 0x00 codecopy // [args1]
 
-    [NAME_SLOT] STORE_MEM_STRING_TO_STORAGE()
+    [NAME_SLOT] STORE_STRING_FROM_MEMORY_TO_STORAGE()
 
     __codesize(MAIN) dup1 __tablestart(DUMMY_TABLE) 0x00 codecopy
     0x00 return
 
 }
 
-#define macro STORE_MEM_STRING_TO_STORAGE() = takes (1) returns (0){
-    0x00 mload 0x1f dup2 gt long jumpi 0x01 shl 0x20 mload add swap1 sstore end jump
-    long: // [len,slot]
+#define macro STORE_STRING_FROM_MEMORY_TO_STORAGE() = takes (1) returns (0){
+    0x00 mload 0x1f dup2 gt multiSlotWrite jumpi 0x01 shl 0x20 mload add swap1 sstore end jump
+    multiSlotWrite: // [len,slot]
         // stored len in storage slot
         dup1 0x01 shl 0x01 add dup3 sstore // [len,slot] 
         swap1 0x00 mstore 0x20 0x00 sha3    // [keccak(slot),len]
         swap1 0x05 shr// [sslot_count,keccak(slot)]
         0x00 
-        loop:
-            dup2 dup2 gt end jumpi // [i,n,sslot]
+        loop:       // [i,n,sslot]
+            dup2 dup2 gt end jumpi 
             dup1 0x20 mul 0x20 add mload dup4 sstore 
             dup3 0x01 add swap3 pop
             0x01 add loop jump
