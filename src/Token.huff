@@ -1,0 +1,52 @@
+/* Interface */
+#define function name() view returns (string memory)
+
+/* Storage Slots */
+#define constant NAME_SLOT = FREE_STORAGE_POINTER()
+
+
+#define macro NAME() = takes (0) returns (0){
+    [NAME_SLOT] sload
+    0x00 mstore 
+    0x20 0x00 return
+}
+
+#define jumptable DUMMY_TABLE {}
+
+#define macro CONSTRUCTOR() = takes(0) returns (0) {
+    __codesize(MAIN) __tablestart(DUMMY_TABLE) add // [args1_offset_pos]
+    0x20 dup2 0x00 codecopy 0x00 mload  // [args1_len_pos,args1_offset_pos]
+    add dup1 0x20 swap1 0x00 codecopy 0x00 mload // [args1_len,args1_pos]
+    0x20 add swap1 0x00 codecopy // [args1]
+
+    [NAME_SLOT] STORE_MEM_STRING_TO_STORAGE()
+
+    __codesize(MAIN) dup1 __tablestart(DUMMY_TABLE) 0x00 codecopy
+    0x00 return
+
+}
+
+#define macro STORE_MEM_STRING_TO_STORAGE() = takes (1) returns (0){
+    0x00 mload 0x1f dup2 gt long jumpi 0x01 shl 0x20 mload add swap1 sstore end jump
+    long: // [len,slot]
+        // stored len in storage slot
+        dup1 0x01 shl 0x01 add dup3 sstore // [len,slot] 
+        swap1 0x00 mstore 0x20 0x00 sha3    // [keccak(slot),len]
+        swap1 0x05 shr// [sslot_count,keccak(slot)]
+        0x00 
+        loop:
+            dup2 dup2 gt end jumpi // [i,n,sslot]
+            dup1 0x20 mul 0x20 add mload dup4 sstore 
+            dup3 0x01 add swap3 pop
+            0x01 add loop jump
+    end:
+}
+
+#define macro MAIN() = takes (0) returns (0) {
+    0x00 calldataload 0xE0 shr
+    dup1 __FUNC_SIG(name) eq name jumpi
+
+    name:
+        NAME()
+
+}
