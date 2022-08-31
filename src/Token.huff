@@ -1,8 +1,11 @@
 /* Interface */
 #define function name() view returns (string memory)
-
+#define function symbol() view returns (string memory)
 /* Storage Slots */
-#define constant NAME_SLOT = FREE_STORAGE_POINTER()
+#define constant NAME_SSLOT = FREE_STORAGE_POINTER()
+#define constant SYMBOL_SSLOT = FREE_STORAGE_POINTER()
+
+// Note : can be optimized further 
 
 #define macro READ_STRING_FROM_STORAGE() = takes (1) returns (0) {
     0x20 0x00 mstore
@@ -24,46 +27,69 @@
 }
 
 #define macro NAME() = takes (0) returns (0){
-    [NAME_SLOT] READ_STRING_FROM_STORAGE()
+    [NAME_SSLOT] READ_STRING_FROM_STORAGE()
 }
 
+#define macro SYMBOL() = takes (0) returns (0){
+    [SYMBOL_SSLOT] READ_STRING_FROM_STORAGE()
+}
 
 #define jumptable DUMMY_TABLE {}
 
 #define macro CONSTRUCTOR() = takes(0) returns (0) {
-    __codesize(MAIN) __tablestart(DUMMY_TABLE) add // [args1_offset_pos]
-    0x20 dup2 0x00 codecopy 0x00 mload  // [args1_len_pos,args1_offset_pos]
-    add dup1 0x20 swap1 0x00 codecopy 0x00 mload // [args1_len,args1_pos]
-    0x20 add swap1 0x00 codecopy // [args1]
+    __codesize(MAIN) __tablestart(DUMMY_TABLE) add      // [constructor_args_pos]
 
-    [NAME_SLOT] STORE_STRING_FROM_MEMORY_TO_STORAGE()
+    dup1 0x20 dup2 0x00 codecopy 0x00 mload             // [args1_offset,constructor_args_pos,constructor_args_pos]
+    add dup1 0x20 swap1 0x00 codecopy 0x00 mload        // [args1_len,args1_pos,constructor_args_pos]
+    0x20 add msize swap2 dup3 codecopy                  // [args1_mem_ptr,constructor_args_pos] || Memory -> args1 
+
+    [NAME_SSLOT] STORE_STRING_FROM_MEMORY_TO_STORAGE()  // [constructor_args_pos]  
+
+    0x20 dup2 0x20 add 0x00 codecopy 0x00 mload         // [args2_offset,constructor_args_pos]
+    add dup1 0x20 swap1 0x00 codecopy 0x00 mload        // [args2_len,args2_pos]
+    0x20 add msize swap2 dup3 codecopy                  // [args2_mem_ptr] || Memory -> args2
+
+    [SYMBOL_SSLOT] STORE_STRING_FROM_MEMORY_TO_STORAGE()// []
 
     __codesize(MAIN) dup1 __tablestart(DUMMY_TABLE) 0x00 codecopy
     0x00 return
 
 }
 
-#define macro STORE_STRING_FROM_MEMORY_TO_STORAGE() = takes (1) returns (0){
-    0x00 mload 0x1f dup2 gt multiSlotWrite jumpi 0x01 shl 0x20 mload add swap1 sstore end jump
-    multiSlotWrite: // [len,slot]
-        // stored len in storage slot
-        dup1 0x01 shl 0x01 add dup3 sstore // [len,slot] 
-        swap1 0x00 mstore 0x20 0x00 sha3    // [keccak(slot),len]
-        swap1 0x05 shr// [sslot_count,keccak(slot)]
+
+#define macro STORE_STRING_FROM_MEMORY_TO_STORAGE() = takes (2) returns (0){
+    //                       Input Stack :     [sslot , mem_ptr]
+    dup2 mload                              // [str_len , sslot , mem_ptr]
+    // str_len > 0x31 ? multipleslot : packedString // https://docs.soliditylang.org/en/v0.8.16/internals/layout_in_storage.html#bytes-and-string
+    0x1f dup2 gt multiSlotWrite jumpi       // [str_len , sslot , mem_ptr]
+    0x01 shl                                // [str_len * 2 , sslot , mem_ptr]
+    dup3 0x20 add mload add                 // [str + str_len * 2 , sslot , mem_ptr]
+    swap1 sstore end jump
+    multiSlotWrite:                         // [str_len , sslot , mem_ptr]
+        // store len in storage slot
+        dup1 0x01 shl 0x01 add dup3 sstore  // [str_len , sslot , mem_ptr]
+        swap1 0x00 mstore 0x20 0x00 sha3    // [word_ptr , str_len , mem_ptr]
+        swap1 0x05 shr                      // [word_count , word_ptr , mem_ptr]
         0x00 
-        loop:       // [i,n,sslot]
-            dup2 dup2 gt end jumpi 
-            dup1 0x20 mul 0x20 add mload dup4 sstore 
+        loop:                               // [i , word_count , word_ptr , mem_ptr]
+            dup2 dup2 gt loop_terminate jumpi 
+            dup1 0x20 mul dup5 0x20 add add mload dup4 sstore 
             dup3 0x01 add swap3 pop
             0x01 add loop jump
+        loop_terminate:
+            pop pop pop
     end:
+        pop
 }
 
 #define macro MAIN() = takes (0) returns (0) {
     0x00 calldataload 0xE0 shr
     dup1 __FUNC_SIG(name) eq name jumpi
+    dup1 __FUNC_SIG(symbol) eq symbol jumpi
 
     name:
         NAME()
+    symbol:
+        SYMBOL()
 
 }
