@@ -13,8 +13,8 @@
     dup1 0xff and 0x01 shr 0x20 mstore
     dup1 0xff not and 0x40 mstore 0x60 0x00 return
     multiSlotRead:
-        0x01 dup2 sub 0x01 shr 0x20 mstore
-        swap1 0x60 mstore 0x20 0x60 sha3
+        0x01 swap1 sub 0x01 shr dup1 0x20 mstore
+        swap1 0x40 mstore 0x20 0x40 sha3
         swap1 0x05 shr
         0x00
         read_loop:
@@ -23,7 +23,7 @@
             dup3 0x01 add swap3 pop
             0x01 add read_loop jump
         read_end:
-            0x20 mul 0x20 add 0x00 return
+            0x20 mul 0x40 add 0x00 return
 }
 
 #define macro NAME() = takes (0) returns (0){
